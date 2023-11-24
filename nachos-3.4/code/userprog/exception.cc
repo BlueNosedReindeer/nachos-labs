@@ -102,6 +102,47 @@ void childFunction(int pid) {
 
 int doFork(int functionAddr) {
 
+    // 1. Check if sufficient memory exists to create a new process
+    if (currentThread->space->GetNumPages() > mm->GetFreePageCount()) {
+        return -1; // Not enough memory
+    }
+
+    // 2. Save user state for the parent thread
+    currentThread->SaveUserState();
+
+    // 3. Create a new address space for the child by copying the parent's address space
+    AddrSpace* childAddrSpace = new AddrSpace(currentThread->space);
+
+    // 4. Create a new thread for the child and set its address space
+    Thread* childThread = new Thread("childThread");
+    childThread->space = childAddrSpace;
+
+    // 5. Create a PCB for the child and connect everything
+    PCB* pcb = pcbManager->AllocatePCB();
+    pcb->thread = childThread;
+    pcb->parent = currentThread->pcb; // Set parent for child PCB
+    currentThread->pcb->addChild(pcb); // Add child to the parent PCB
+
+    // 6. Set up machine registers for the child and save them to the child thread
+    childThread->SaveUserState();
+    machine->WriteRegister(PCReg, functionAddr);
+    machine->WriteRegister(PrevPCReg, functionAddr - 4);
+    machine->WriteRegister(NextPCReg, functionAddr + 4);
+
+    // 7. Restore the register state of the parent user-level process
+    currentThread->RestoreUserState();
+
+    // 8. Call thread->Fork on the child
+    childThread->Fork(childFunction, pcb->pid);
+
+    // 9. Return the child process ID
+    return pcb->pid;
+}
+
+
+/*
+int doFork(int functionAddr) {
+
     // 1. Check if sufficient memory exists to create new process
     // currentThread->space->GetNumPages() <= mm->GetFreePageCount()
     // if check fails, return -1
@@ -143,6 +184,7 @@ int doFork(int functionAddr) {
     // 9. return pcb->pid;
 
 }
+*/
 
 int doExec(char* filename) {
 
@@ -234,6 +276,7 @@ int doKill (int pid) {
     // scheduler->RemoveThread(pcb->thread);
 
     // 5. return 0 for success!
+    
 }
 
 
