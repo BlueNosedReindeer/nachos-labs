@@ -139,53 +139,6 @@ int doFork(int functionAddr) {
     return pcb->pid;
 }
 
-
-/*
-int doFork(int functionAddr) {
-
-    // 1. Check if sufficient memory exists to create new process
-    // currentThread->space->GetNumPages() <= mm->GetFreePageCount()
-    // if check fails, return -1
-
-    // 2. SaveUserState for the parent thread
-    // currentThread->SaveUserState();
-
-    // 3. Create a new address space for child by copying parent address space
-    // Parent: currentThread->space
-    // childAddrSpace: new AddrSpace(currentThread->space)
-
-    // 4. Create a new thread for the child and set its addrSpace
-    // childThread = new Thread("childThread")
-    // child->space = childAddSpace;
-
-    // 5. Create a PCB for the child and connect it all up
-    // pcb: pcbManager->AllocatePCB();
-    // pcb->thread = childThread
-    // set parent for child pcb
-    // add child for parent pcb
-    // initialize pcb in childAddSpace
-
-    // 6. Set up machine registers for child and save it to child thread
-    // PCReg: functionAddr
-    // PrevPCReg: functionAddr-4
-    // NextPCReg: functionAddr+4
-    // childThread->SaveUserState();
-
-    // 7. Restore register state of parent user-level process
-    // currentThread->RestoreUserState()
-
-    // 8. Call thread->fork on Child
-    // childThread->Fork(childFunction, pcb->pid)
-
-    // pcreg = machine->ReadRegister(PCReg)
-    // print message for child creation (pid,  pcreg, currentThread->space->GetNumPages())
-
-
-    // 9. return pcb->pid;
-
-}
-*/
-
 int doExec(char* filename) {
 
     // Use progtest.cc:StartProcess() as a guide
