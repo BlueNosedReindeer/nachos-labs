@@ -49,10 +49,9 @@
 //	are in machine.h.
 //----------------------------------------------------------------------
 
-
 void doExit(int status) {
 
-    int pid = 99;
+    int pid = currentThread->space->pcb->pid;
 
     printf("System Call: [%d] invoked [Exit]\n", pid);
     printf ("Process [%d] exits with [%d]\n", pid, status);
@@ -87,16 +86,15 @@ void incrementPC() {
     machine->WriteRegister(NextPCReg, oldPCReg + 8);
 }
 
-
 void childFunction(int pid) {
 
     // 1. Restore the state of registers
-    // currentThread->RestoreUserState()
+    currentThread->RestoreUserState();
 
     // 2. Restore the page table for child
-    // currentThread->space->RestoreState()
+    currentThread->space->RestoreState();
 
-    // machine->Run();
+    machine->Run();
 
 }
 
@@ -120,8 +118,10 @@ int doFork(int functionAddr) {
     // 5. Create a PCB for the child and connect everything
     PCB* pcb = pcbManager->AllocatePCB();
     pcb->thread = childThread;
-    pcb->parent = currentThread->pcb; // Set parent for child PCB
-    currentThread->pcb->addChild(pcb); // Add child to the parent PCB
+    // Use currentThread instead of currentThread->pcb
+    pcb->parent = currentThread->space->pcb;
+    // Add child to the parent PCB
+    currentThread->space->pcb->AddChild(pcb);
 
     // 6. Set up machine registers for the child and save them to the child thread
     childThread->SaveUserState();
@@ -144,103 +144,99 @@ int doExec(char* filename) {
     // Use progtest.cc:StartProcess() as a guide
 
     // 1. Open the file and check validity
-    // OpenFile *executable = fileSystem->Open(filename);
-    // AddrSpace *space;
+    OpenFile *executable = fileSystem->Open(filename);
+    AddrSpace *space;
 
-    // if (executable == NULL) {
-    //     printf("Unable to open file %s\n", filename);
-    //     return -1;
-    // }
+    if (executable == NULL) {
+        printf("Unable to open file %s\n", filename);
+        return -1;
+    }
 
     // 2. Delete current address space but store current PCB first if using in Step 5.
-    // PCB* pcb = currentThread->space->pcb;
-    // delete currentThread->space;
+    PCB* pcb = currentThread->space->pcb;
+    delete currentThread->space;
 
     // 3. Create new address space
-    // space = new AddrSpace(executable);
+    space = new AddrSpace(executable);
 
     // 4.     delete executable;			// close file
+    delete executable;
 
     // 5. Check if Addrspace creation was successful
-    // if(space->valid != true) {
-    // printf("Could not create AddrSpace\n");
-    //     return -1;
-    // }
+    if(space->valid != true) {
+    printf("Could not create AddrSpace\n");
+        return -1;
+    }
 
     // 6. Set the PCB for the new addrspace - reused from deleted address space
-    // space->pcb = pcb;
+    space->pcb = pcb;
 
     // 7. Set the addrspace for currentThread
-    // currentThread->space = space;
+    currentThread->space = space;
 
     // 8. Initialize registers for new addrspace
-    //  space->InitRegisters();		// set the initial register values
+    space->InitRegisters();		// set the initial register values
 
     // 9. Initialize the page table
-    // space->RestoreState();		// load page table register
+    space->RestoreState();		// load page table register
 
     // 10. Run the machine now that all is set up
-    // machine->Run();			// jump to the user progam
-    // ASSERT(FALSE); // Execution nevere reaches here
+    machine->Run();			// jump to the user progam
+    ASSERT(FALSE); // Execution nevere reaches here
 
     return 0;
 }
 
-
 int doJoin(int pid) {
-
     // 1. Check if this is a valid pid and return -1 if not
-    // PCB* joinPCB = pcbManager->GetPCB(pid);
-    // if (pcb == NULL) return -1;
+    PCB* joinPCB = pcbManager->GetPCB(pid);
+    if (joinPCB == NULL) return -1;
 
-    // 2. Check if pid is a child of current process
-    // PCB* pcb = currentThread->space->pcb;
-    // if (pcb != joinPCB->parent) return -1;
+    // 2. Check if pid is a child of the current process
+    PCB* pcb = currentThread->space->pcb;
+    if (pcb != joinPCB->parent) return -1;
 
-    // 3. Yield until joinPCB has not exited
-    // while(!joinPCB->hasExited) currentThread->Yield();
+    // 3. Yield until joinPCB has exited
+    while (!joinPCB->HasExited()) currentThread->Yield();
 
     // 4. Store status and delete joinPCB
-    // int status = joinPCB->exitStatus;
-    // delete joinPCB;
+    int status = joinPCB->exitStatus;
+    delete joinPCB;
 
-    // 5. return status;
-
+    // 5. Return status
+    return status;
 }
 
 
 int doKill (int pid) {
 
     // 1. Check if the pid is valid and if not, return -1
-    // PCB* joinPCB = pcbManager->GetPCB(pid);
-    // if (pcb == NULL) return -1;
+    PCB* joinPCB = pcbManager->GetPCB(pid);
+    if (joinPCB == NULL) return -1;
 
     // 2. IF pid is self, then just exit the process
-    // if (pcb == currentThread->space->pcb) {
-    //         doExit(0);
-    //         return 0;
-    // }
+    if (joinPCB == currentThread->space->pcb) {
+            doExit(0);
+            return 0;
+    }
 
     // 3. Valid kill, pid exists and not self, do cleanup similar to Exit
     // However, change references from currentThread to the target thread
-    // pcb->thread is the target thread
+    Thread* targetThread = joinPCB->thread;
+    scheduler->RemoveThread(targetThread);
+    currentThread->Finish(); // Finish the current thread
+
 
     // 4. Set thread to be destroyed.
-    // scheduler->RemoveThread(pcb->thread);
+    scheduler->RemoveThread(joinPCB->thread);
 
     // 5. return 0 for success!
-    
+    return 0;
 }
-
-
 
 void doYield() {
     currentThread->Yield();
 }
-
-
-
-
 
 // This implementation (discussed in one of the videos) is broken!
 // Try and figure out why.
@@ -257,15 +253,6 @@ char* readString1(int virtAddr) {
 
 }
 
-
-
-
-
-
-
-
-
-
 // This implementation is correct!
 // perform MMU translation to access physical memory
 char* readString(int virtualAddr) {
@@ -275,7 +262,7 @@ char* readString(int virtualAddr) {
 
     // Need to get one byte at a time since the string may straddle multiple pages that are not guaranteed to be contiguous in the physicalAddr space
     bcopy(&(machine->mainMemory[physicalAddr]),&str[i],1);
-    while(str[i] != '\0' && i != 256-1)
+    while(str[i] != '\0' && i < 256-1)
     {
         virtualAddr++;
         i++;
@@ -338,4 +325,3 @@ ExceptionHandler(ExceptionType which)
 	ASSERT(FALSE);
     }
 }
-
